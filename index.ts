@@ -4,7 +4,6 @@ import { Client } from '@notionhq/client';
 import { NotionConverter } from 'notion-to-md';
 import { PageReferenceManifestManager } from 'notion-to-md/utils';
 import { PageReferenceEntryType } from 'notion-to-md/types';
-import { MDXRenderer } from 'notion-to-md/plugins/renderer';
 import prettier from 'prettier';
 import * as core from '@actions/core';
 
@@ -18,11 +17,13 @@ import {
   getOptionalNumber
 } from './modules.js';
 
-import { 
-  customAnnotationTransformers, 
-  customPropertyTransformers, 
-  customBlockTransformers 
+import {
+  customAnnotationTransformers,
+  customPropertyTransformers,
+  customBlockTransformers
 } from './transformer.js';
+
+import { SpacedMDXRenderer } from './renderer.js';
 
 import { resolveConfig } from './config.js';
 
@@ -35,7 +36,6 @@ async function run(): Promise<void> {
       frontmatter: getOptionalBoolean('frontmatter'),
       enableDefaultFrontmatterMetadata: getOptionalBoolean('enableDefaultFrontmatterMetadata'),
       embedMedia: getOptionalBoolean('embedMedia'),
-      enableKramdownTogglePatch: getOptionalBoolean('enableKramdownTogglePatch'),
     });
 
     const token = core.getInput('NOTION-TOKEN', { required: true });
@@ -68,21 +68,13 @@ async function run(): Promise<void> {
       delete blockTransformers.video;
       delete blockTransformers.embed;
     }
-    if (!config.enableKramdownTogglePatch) {
-      delete blockTransformers.toggle;
-      delete blockTransformers.heading_1;
-      delete blockTransformers.heading_2;
-      delete blockTransformers.heading_3;
-      // @ts-ignore
-      delete blockTransformers.heading_4;
-    }
 
     core.info('Starting Notion workspace conversion...');
     for (const node of notionArray) {
       if (node.type === 'page') {
         await core.group(`Converting Page: ${node.filePath} ...`, async () => {
           core.info(`Converting Page: ${node.filePath} ...`);
-          const renderer = new MDXRenderer({
+          const renderer = new SpacedMDXRenderer({
             frontmatter: config.frontmatter && {
               defaults: config.enableDefaultFrontmatterMetadata
                 ? {
@@ -94,7 +86,8 @@ async function run(): Promise<void> {
             }})
             .createAnnotationTransformers(customAnnotationTransformers)
             .createPropertyTransformers(customPropertyTransformers)
-            .createBlockTransformers(blockTransformers);
+            .createBlockTransformers(blockTransformers)
+            .applyBlockLayout();
 
           const converter = new NotionConverter(notionClient)
             .configureFetcher({ fetchPageProperties: true, maxRequestsPerSecond: 3 })
